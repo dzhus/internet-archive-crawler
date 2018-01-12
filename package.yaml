@@ -1,0 +1,33 @@
+name:                archive-crawler
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/githubuser/archive-crawler#readme
+license:             BSD3
+author:              Author name here
+maintainer:          example@example.com
+copyright:           2018 Author name here
+category:            Web
+extra-source-files:
+- README.md
+
+default-extensions:
+  - DeriveGeneric
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - TypeFamilies
+
+dependencies:
+  - base >= 4.7 && < 5
+  - aeson
+  - classy-prelude
+  - html-conduit
+  - http-client
+  - http-client-tls
+  - http-conduit
+  - xml-conduit
+
+executables:
+  archive-crawler:
+    source-dirs:      src
+    main:             Main.hs
