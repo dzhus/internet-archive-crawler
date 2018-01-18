@@ -4,9 +4,11 @@ import ClassyPrelude
 
 import Data.Aeson
 import Data.Aeson.Types
+import Data.Text (dropWhileEnd, split)
 import Text.HTML.DOM
 import Text.XML hiding (parseLBS)
 import Text.XML.Cursor
+import Text.Pandoc
 
 import Network.HTTP.Simple
 import Network.HTTP.Client.TLS
@@ -78,11 +80,20 @@ getSnapshot url ts = do
   res <- httpLBS $ fromString $ "https://web.archive.org/web/" <> show ts <> "/" <> url
   return $ getResponseBody res
 
-extractMyEntries :: LByteString
+data BlogEntry = BlogEntry
+  { title   :: Text
+  , url     :: Url
+  , body    :: LText
+  , date    :: Day
+  }
+
+extractMyEntries :: Text
+                 -- ^ Matching @entrygroup@ id prefix.
+                 -> LByteString
                  -- ^ RuNIX page snapshot body.
-                 -> [(Url, LByteString)]
-extractMyEntries res =
-  mapMaybe renderCursor results
+                 -> [BlogEntry]
+extractMyEntries entryIdPrefix res =
+  mapMaybe extractEntry results
   where
     root = fromDocument $ parseLBS res
     results =
@@ -90,18 +101,54 @@ extractMyEntries res =
       element "div" >=>
       attributeIs "class" "entrygroup" >=>
       checkElement (\(Element _ as _) ->
-                      Just True == (("http://sphinx.net.ru" `isPrefixOf`) <$> lookup "id" as))
-    renderCursor :: Cursor -> Maybe (Url, LByteString)
+                      Just True == ((entryIdPrefix `isPrefixOf`) <$> lookup "id" as))
+    renderCursor :: Cursor -> Maybe LText
     renderCursor cur =
       case node cur of
         NodeElement el ->
-          Just ( unpack $ concat $ attribute "id" cur
-               , renderLBS def $ Document (Prologue [] Nothing []) el [])
+          Just $ renderText def{rsXMLDeclaration = False, rsPretty = True} $
+          Document (Prologue [] Nothing []) el []
         _ -> Nothing
+    extractEntry :: Cursor -> Maybe BlogEntry
+    extractEntry cur =
+      BlogEntry <$>
+      headMay (cur $// element "h4" &// content) <*>
+      (unpack <$> headMay (attribute "id" cur)) <*>
+      (renderCursor =<< elBody) <*>
+      (extractDay =<< headMay (cur $//
+                                (element "div" >=> attributeIs "class" "entry") &/
+                                (element "p" >=> attributeIs "class" "date")))
+      where
+        elBody = headMay (cur $// (element "div" >=> attributeIs "class" "content"))
+    extractDay :: Cursor -> Maybe Day
+    extractDay c =
+      parseTimeM True defaultTimeLocale "%d.%m.%Y" =<<
+      headMay (words $ unpack $ concat $ c $// content)
+
+storeBlogEntry :: BlogEntry -> IO ()
+storeBlogEntry BlogEntry{..} =
+  void $ runIO $
+  readHtml def (toStrict body) >>=
+  writeMarkdown def{writerReferenceLinks = True} >>=
+  writeFileUtf8 (unpack fname)
+  where
+    fname = tshow date <> slug <> ".md"
+    -- A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
+    slug =
+      maybe "" ("-" <>) $
+      lastMay (split slash $ dropWhileEnd slash $ pack url)
+    slash = (== '/')
+
+saveRunix m = do
+  cs <- getCalendars "http://runix.org"
+  forM_ (extractTimestamps cs) $
+    \ts -> do
+      putStrLn $ "Fetching " <> tshow ts
+      es <- extractMyEntries "http://sphinx.net.ru"
+        <$> getSnapshot "http://runix.org" ts
+      unless (null es) $ forM_ es storeBlogEntry
 
 main :: IO ()
 main = do
   m <- newTlsManager
-  -- cs <- getCalendars "http://runix.org"
-  -- print $ extractTimestamps cs
-  print =<< (extractMyEntries <$> getSnapshot "http://runix.org" 20090602054252)
+  saveRunix m
