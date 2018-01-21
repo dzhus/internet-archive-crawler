@@ -26,6 +26,7 @@ dependencies:
   - http-client
   - http-client-tls
   - http-conduit
+  - lens
   - pandoc
   - text
   - xml-conduit
