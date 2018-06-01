@@ -62,7 +62,7 @@ instance FromJSON DayBlip where
 type Timestamp = String
 
 recovering :: (MonadIO m, MonadMask m) => m a -> m a
-recovering f = recoverAll (limitRetries 5 <> fullJitterBackoff 1000000) $ \_ -> f
+recovering f = recoverAll (limitRetries 5 <> fullJitterBackoff 1000000) $ const f
 
 -- | Get list of Internet Archive captures for a URL.
 getCalendars :: (MonadCatch m, MonadIO m, MonadMask m)
@@ -178,7 +178,7 @@ getLargestEntry :: (MonadCatch m, MonadIO m, MonadMask m)
 getLargestEntry url = do
   ts <- extractTimestamps <$> getCalendars url
   snapshots <- forM ts (getSnapshot url)
-  return $ headMay $ sortBy (comparing (length . body)) $ mapMaybe (extractEntry url) snapshots
+  return $ headMay $ sortOn (length . body) $ mapMaybe (extractEntry url) snapshots
 
 storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
