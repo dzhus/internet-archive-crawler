@@ -179,9 +179,13 @@ storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
   void $ runIO $
   readHtml def (toStrict body) >>=
-  writeMarkdown def{writerReferenceLinks = True} >>=
+  writeMarkdown writeOptions >>=
   writeFileUtf8 (unpack fname)
   where
+    writeOptions =
+      def { writerReferenceLinks = True
+          , writerSetextHeaders = False
+          }
     fname = tshow date <> slug <> ".md"
     -- A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
     slug =
