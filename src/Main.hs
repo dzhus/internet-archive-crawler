@@ -208,9 +208,9 @@ saveRunix = do
         <$> getSnapshot "http://runix.org" ts
       unless (null es) $ forM_ es storeBlogEntry
 
-saveMyEntries :: IO ()
-saveMyEntries = do
-  urls <- getArchivedUrls "http://sphinx.net.ru:80/blog/entry/"
+saveMyEntries :: Text -> IO ()
+saveMyEntries pat = do
+  urls <- getArchivedUrls pat
   forM_ urls $ \u -> do
     putStrLn $ "Fetching " <> pack u
     s <- getLargestEntry (u :: Url)
@@ -220,5 +220,6 @@ saveMyEntries = do
 
 main :: IO ()
 main = do
+  saveMyEntries "http://sphinx.net.ru:80/blog/entry/"
+  saveMyEntries "http://dzhus.org:80/blog/entry/"
   saveRunix
-  saveMyEntries
