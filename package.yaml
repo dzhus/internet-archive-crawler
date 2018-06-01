@@ -1,12 +1,10 @@
-name:                archive-crawler
+name:                internet-archive-crawler
 version:             0.1.0.0
-#synopsis:
-#description:
-homepage:            https://github.com/githubuser/archive-crawler#readme
+homepage:            https://github.com/dzhus/internet-archive-crawler#readme
 license:             BSD3
-author:              Author name here
-maintainer:          example@example.com
-copyright:           2018 Author name here
+author:              Dmitry Dzhus
+maintainer:          dima@dzhus.org
+copyright:           2018 Dmitry Dzhus
 category:            Web
 extra-source-files:
 - README.md
@@ -19,7 +17,7 @@ default-extensions:
   - TypeFamilies
 
 dependencies:
-  - base >= 4.7 && < 5
+  - base < 5
   - aeson
   - classy-prelude
   - html-conduit
@@ -32,6 +30,6 @@ dependencies:
   - xml-conduit
 
 executables:
-  archive-crawler:
+  internet-archive-crawler:
     source-dirs:      src
     main:             Main.hs
