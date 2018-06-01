@@ -5,6 +5,7 @@ module Main where
 import ClassyPrelude
 
 import Control.Lens hiding (element)
+import Control.Retry hiding (recovering)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.Text (dropWhileEnd, split)
@@ -60,8 +61,14 @@ instance FromJSON DayBlip where
 
 type Timestamp = String
 
-getCalendars :: MonadIO m => Url -> m [YearCaptures]
-getCalendars url = do
+recovering :: (MonadIO m, MonadMask m) => m a -> m a
+recovering f = recoverAll (limitRetries 5 <> fullJitterBackoff 1000000) $ \_ -> f
+
+-- | Get list of Internet Archive captures for a URL.
+getCalendars :: (MonadCatch m, MonadIO m, MonadMask m)
+             => Url
+             -> m [YearCaptures]
+getCalendars url = recovering $ do
   res <- httpJSON $ fromString $ "https://web.archive.org/__wb/sparkline?output=json&collection=web&url=" <> url
   forM (keys $ years $ getResponseBody res) $ \y -> do
     r <- httpJSON $ fromString $
@@ -78,16 +85,12 @@ extractTimestamps = concat . mapMaybe extractTs . concatMap processYear
     extractTs (DayBlip ts) = Just ts
     extractTs _            = Nothing
 
-getSnapshot :: (MonadCatch m, MonadIO m) => Url -> ArchiveTimestamp -> m LByteString
-getSnapshot url ts = do
+getSnapshot :: (MonadCatch m, MonadIO m, MonadMask m) => Url -> ArchiveTimestamp -> m LByteString
+getSnapshot url ts = recovering $ do
   let m = pack url <> " @ " <> tshow ts
   putStrLn $ "Fetching " <> m
-  catch
-    (getResponseBody <$>
-     httpLBS (fromString $ "https://web.archive.org/web/" <> show ts <> "/" <> url)) $
-    \(e :: HttpException) -> do
-      putStrLn $ "Error while fetching " <> m
-      return ""
+  getResponseBody <$>
+    httpLBS (fromString $ "https://web.archive.org/web/" <> show ts <> "/" <> url)
 
 newtype ArchivedUrls = ArchivedUrls [(Text, Text, Url, Text, Text, Text, Text)]
   deriving (Generic)
@@ -97,11 +100,11 @@ instance FromJSON ArchivedUrls
 instance ToJSON ArchivedUrls
 
 -- | Find all URLs with a given prefix in the Internet Archive.
-getArchivedUrls :: MonadIO m
+getArchivedUrls :: (MonadCatch m, MonadIO m, MonadMask m)
                 => Text
                 -- ^ URL prefix.
                 -> m [Url]
-getArchivedUrls pref = do
+getArchivedUrls pref = recovering $ do
   res <- httpJSON $ fromString $
     "https://web.archive.org/cdx/search?matchType=prefix&collapse=urlkey&output=json&url=" <> unpack pref
   let ArchivedUrls us = getResponseBody res
@@ -169,7 +172,9 @@ extractEntry url res =
       (words $ unpack t)
     root = fromDocument $ parseLBS res
 
-getLargestEntry :: (MonadCatch m, MonadIO m) => Url -> m (Maybe BlogEntry)
+getLargestEntry :: (MonadCatch m, MonadIO m, MonadMask m)
+                => Url
+                -> m (Maybe BlogEntry)
 getLargestEntry url = do
   ts <- extractTimestamps <$> getCalendars url
   snapshots <- forM ts (getSnapshot url)

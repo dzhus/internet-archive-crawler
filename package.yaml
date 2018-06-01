@@ -26,6 +26,7 @@ dependencies:
   - http-conduit
   - lens
   - pandoc
+  - retry
   - text
   - xml-conduit
 
