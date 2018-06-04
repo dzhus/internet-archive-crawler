@@ -183,7 +183,8 @@ getLargestEntry :: (MonadCatch m, MonadIO m, MonadMask m)
 getLargestEntry url = do
   ts <- extractTimestamps <$> getCalendars url
   snapshots <- forM ts (getSnapshot url)
-  return $ headMay $ sortOn (length . body) $ mapMaybe (extractEntry url) snapshots
+  return $ headMay $
+    sortOn (Down . length . body) $ mapMaybe (extractEntry url) snapshots
 
 storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
