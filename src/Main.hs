@@ -234,6 +234,6 @@ saveMyEntries pat = do
 
 main :: IO ()
 main = do
+  saveRunix
   saveMyEntries "http://sphinx.net.ru:80/blog/entry/"
   saveMyEntries "http://dzhus.org:80/blog/entry/"
-  saveRunix
