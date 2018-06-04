@@ -164,12 +164,14 @@ extractMyEntries entryIdPrefix res =
 
 -- | Extract an entry from its IA snapshot.
 extractEntry :: Url -> LByteString -> Maybe BlogEntry
-extractEntry url res =
+extractEntry url res = do
+  -- Some entries appear truncated on IA, ignore those.
+  _ <- headMay (root $// attributeIs "id" "comments")
   BlogEntry <$>
-  headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
-  pure url <*>
-  (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
-  extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title")
+    headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
+    pure url <*>
+    (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
+    extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title")
   where
     extractDay :: Text -> Maybe Day
     extractDay t =
