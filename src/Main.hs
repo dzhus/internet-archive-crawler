@@ -10,7 +10,7 @@ import Control.Retry hiding (recovering)
 import Data.Aeson
 import Data.Aeson.Types
 import Data.List.Split (chunksOf)
-import Data.Text (dropWhileEnd, split)
+import Data.Text (dropWhileEnd, split, splitOn)
 import Text.HTML.DOM
 import Text.XML hiding (parseLBS)
 import Text.XML.Cursor
@@ -130,13 +130,15 @@ renderCursor cur =
       Document (Prologue [] Nothing []) el []
     _ -> Nothing
 
+parseTime' = parseTimeM True defaultTimeLocale "%d.%m.%Y"
+
 -- | Extract my entries from RuNIX page snapshot.
-extractMyEntries :: Text
-                 -- ^ Matching @entrygroup@ id prefix.
-                 -> LByteString
-                 -- ^ RuNIX page snapshot body.
-                 -> [BlogEntry]
-extractMyEntries entryIdPrefix res =
+extractMyRunixEntries :: Text
+                      -- ^ Matching @entrygroup@ id prefix.
+                      -> LByteString
+                      -- ^ RuNIX page snapshot body.
+                      -> [BlogEntry]
+extractMyRunixEntries entryIdPrefix res =
   mapMaybe extractRunixEntry results
   where
     root = fromDocument $ parseLBS res
@@ -159,34 +161,38 @@ extractMyEntries entryIdPrefix res =
         elBody = headMay (cur $// (element "div" >=> attributeIs "class" "content"))
     extractDay :: Cursor -> Maybe Day
     extractDay c =
-      parseTimeM True defaultTimeLocale "%d.%m.%Y" =<<
-      headMay (words $ unpack $ concat $ c $// content)
+      parseTime' =<< headMay (words $ unpack $ concat $ c $// content)
 
--- | Extract an entry from its IA snapshot.
-extractEntry :: Url -> LByteString -> Maybe BlogEntry
-extractEntry url res = do
-  -- Some entries appear truncated on IA, ignore those.
-  _ <- headMay (root $// attributeIs "id" "comments")
+extractEntry :: Cursor -> Maybe BlogEntry
+extractEntry root =
   BlogEntry <$>
-    headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
-    pure url <*>
-    (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
-    extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title")
+  headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
+  permalinkToUrl (headMay $ concat $ root $// attributeIs "class" "entry_permalink" &| attribute "href") <*>
+  (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
+  extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title")
   where
+    permalinkToUrl :: Maybe Text -> Maybe Url
+    -- Permalinks on Archived pages have IA prefixes which we drop here
+    permalinkToUrl t = unpack <$> (headMay =<< tailMay =<< splitOn "/http://" <$> t)
     extractDay :: Text -> Maybe Day
-    extractDay t =
-      headMay $ mapMaybe (parseTimeM True defaultTimeLocale "%d.%m.%Y")
-      (words $ unpack t)
+    extractDay t = headMay $ mapMaybe parseTime' (words $ unpack t)
+
+-- | Extract all blog entries from an IA page snapshot.
+--
+-- There may be more than one entry on a page.
+extractEntries :: LByteString -> [BlogEntry]
+extractEntries res =
+  catMaybes $ root $// attributeIs "class" "blog_entry" &| extractEntry
+  where
     root = fromDocument $ parseLBS res
 
-getLargestEntry :: (MonadCatch m, MonadIO m, MonadMask m)
-                => Url
-                -> m (Maybe BlogEntry)
-getLargestEntry url = do
+getAllEntries :: (MonadCatch m, MonadIO m, MonadMask m)
+              => Url
+              -> m [BlogEntry]
+getAllEntries url = do
   ts <- extractTimestamps <$> getCalendars url
   snapshots <- forM ts (getSnapshot url)
-  return $ headMay $
-    sortOn (Down . length . body) $ mapMaybe (extractEntry url) snapshots
+  return $ concatMap extractEntries snapshots
 
 storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
@@ -212,28 +218,30 @@ saveRunix = do
   void $ concurrentlyPooled 10 (extractTimestamps cs) $
     \ts -> do
       putStrLn $ "Fetching " <> tshow ts
-      es <- extractMyEntries "http://sphinx.net.ru"
+      es <- extractMyRunixEntries "http://sphinx.net.ru"
         <$> getSnapshot "http://runix.org" ts
       unless (null es) $ forM_ es storeBlogEntry
 
 concurrentlyPooled n source action = do
   processors <-
     mapM (async . mapM action) $ chunksOf (length source `div` n) source
-  res <- mapM wait processors
-  return $ concat res
+  concat <$> mapM wait processors
 
 saveMyEntries :: Text -> IO ()
 saveMyEntries pat = do
   urls <- getArchivedUrls pat
-  void $ concurrentlyPooled 10 urls $ \u -> do
+  putStrLn $ "Found " <> tshow (length urls) <> " URLs to crawl"
+  -- Each URL may have multiple captures, collect them all
+  entries <- concurrentlyPooled 10 urls $ \u -> do
     putStrLn $ "Fetching " <> pack u
-    s <- getLargestEntry (u :: Url)
-    case s of
-      Just e -> storeBlogEntry e
-      Nothing -> putStrLn $ "No entries for " <> pack u
+    getAllEntries u
+  mapM_ storeBlogEntry $
+    mapMaybe (headMay . sortOn (Down . length . body)) $
+    groupBy (\e1 e2 -> url e1 == url e2) $
+    concat entries
 
 main :: IO ()
 main = do
   saveRunix
-  saveMyEntries "http://sphinx.net.ru:80/blog/entry/"
-  saveMyEntries "http://dzhus.org:80/blog/entry/"
+  saveMyEntries "http://sphinx.net.ru:80/blog/"
+  saveMyEntries "http://dzhus.org:80/blog/"
