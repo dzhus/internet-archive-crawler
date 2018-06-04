@@ -11,6 +11,7 @@ extra-source-files:
 
 default-extensions:
   - DeriveGeneric
+  - FlexibleContexts
   - NoImplicitPrelude
   - OverloadedStrings
   - RecordWildCards
@@ -20,11 +21,13 @@ dependencies:
   - base < 5
   - aeson
   - classy-prelude
+  - split
   - html-conduit
   - http-client
   - http-client-tls
   - http-conduit
   - lens
+  - lifted-async
   - pandoc
   - retry
   - text

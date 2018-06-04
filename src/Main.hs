@@ -4,10 +4,12 @@ module Main where
 
 import ClassyPrelude
 
+import Control.Concurrent.Async.Lifted hiding (async)
 import Control.Lens hiding (element)
 import Control.Retry hiding (recovering)
 import Data.Aeson
 import Data.Aeson.Types
+import Data.List.Split (chunksOf)
 import Data.Text (dropWhileEnd, split)
 import Text.HTML.DOM
 import Text.XML hiding (parseLBS)
@@ -201,17 +203,23 @@ storeBlogEntry BlogEntry{..} =
 saveRunix :: IO ()
 saveRunix = do
   cs <- getCalendars "http://runix.org"
-  forM_ (extractTimestamps cs) $
+  void $ concurrentlyPooled 10 (extractTimestamps cs) $
     \ts -> do
       putStrLn $ "Fetching " <> tshow ts
       es <- extractMyEntries "http://sphinx.net.ru"
         <$> getSnapshot "http://runix.org" ts
       unless (null es) $ forM_ es storeBlogEntry
 
+concurrentlyPooled n source action = do
+  processors <-
+    mapM (async . mapM action) $ chunksOf (length source `div` n) source
+  res <- mapM wait processors
+  return $ concat res
+
 saveMyEntries :: Text -> IO ()
 saveMyEntries pat = do
   urls <- getArchivedUrls pat
-  forM_ urls $ \u -> do
+  void $ concurrentlyPooled 10 urls $ \u -> do
     putStrLn $ "Fetching " <> pack u
     s <- getLargestEntry (u :: Url)
     case s of
