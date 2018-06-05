@@ -21,6 +21,7 @@ dependencies:
   - base < 5
   - aeson
   - classy-prelude
+  - exceptions
   - split
   - html-conduit
   - http-client

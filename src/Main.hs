@@ -4,8 +4,8 @@ module Main where
 
 import ClassyPrelude
 
-import Control.Concurrent.Async.Lifted hiding (async)
 import Control.Lens hiding (element)
+import Control.Monad.Catch
 import Control.Retry hiding (recovering)
 import Data.Aeson
 import Data.Aeson.Types
