@@ -29,6 +29,7 @@ dependencies:
   - lens
   - lifted-async
   - pandoc
+  - pandoc-types
   - retry
   - text
   - xml-conduit

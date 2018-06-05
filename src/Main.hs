@@ -15,6 +15,7 @@ import Text.HTML.DOM
 import Text.XML hiding (parseLBS)
 import Text.XML.Cursor
 import Text.Pandoc
+import Text.Pandoc.Builder (setMeta)
 
 import Network.HTTP.Simple
 import Network.HTTP.Client.TLS
@@ -197,13 +198,16 @@ getAllEntries url = do
 storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
   void $ runIO $
-  readHtml def (toStrict body) >>=
+  addMeta <$> readHtml def (toStrict body) >>=
   writeMarkdown writeOptions >>=
   writeFileUtf8 (unpack fname)
   where
+    addMeta = setMeta "title" (MetaString $ unpack title)
     writeOptions =
       def { writerReferenceLinks = True
           , writerSetextHeaders = False
+          , writerExtensions = pandocExtensions
+          , writerTemplate = Just "$titleblock$\n\n$body$"
           }
     fname = tshow date <> slug <> ".md"
     -- A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
