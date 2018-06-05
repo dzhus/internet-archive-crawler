@@ -90,7 +90,10 @@ extractTimestamps = concat . mapMaybe extractTs . concatMap processYear
     extractTs (DayBlip ts) = Just ts
     extractTs _            = Nothing
 
-getSnapshot :: (MonadCatch m, MonadIO m, MonadMask m) => Url -> ArchiveTimestamp -> m LByteString
+getSnapshot :: (MonadCatch m, MonadIO m, MonadMask m)
+            => Url
+            -> ArchiveTimestamp
+            -> m LByteString
 getSnapshot url ts = recovering $ \attempt -> do
   let m = pack url <> " @ " <> tshow ts
   logAttempt attempt $ "Fetching " <> m
