@@ -6,6 +6,7 @@ import ClassyPrelude
 
 import Control.Lens hiding (element)
 import Control.Monad.Catch
+import Control.Monad.IO.Unlift
 import Control.Retry hiding (recovering)
 import Data.Aeson
 import Data.Aeson.Types
@@ -61,8 +62,6 @@ instance FromJSON DayBlip where
     then pure EmptyBlip
     else DayBlip <$> o .: "ts"
   parseJSON ty = typeMismatch "DayBlip" ty
-
-type Timestamp = String
 
 recovering :: (MonadIO m, MonadMask m) => (Int -> m a) -> m a
 recovering f = recoverAll (limitRetries 10 <> fullJitterBackoff 1000000) (f . rsIterNumber)
@@ -132,6 +131,7 @@ renderCursor cur =
       Document (Prologue [] Nothing []) el []
     _ -> Nothing
 
+parseTime' :: String -> Maybe Day
 parseTime' = parseTimeM True defaultTimeLocale "%d.%m.%Y"
 
 -- | Extract my entries from RuNIX page snapshot.
@@ -234,6 +234,11 @@ saveRunix = do
         <$> getSnapshot "http://runix.org" ts
       unless (null es) $ forM_ es storeBlogEntry
 
+concurrentlyPooled :: MonadUnliftIO m
+                   => Int
+                   -> [e]
+                   -> (e -> m b)
+                   -> m [b]
 concurrentlyPooled n source action = do
   processors <-
     mapM (async . mapM action) $ chunksOf (length source `div` n) source

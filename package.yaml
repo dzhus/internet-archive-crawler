@@ -33,6 +33,7 @@ dependencies:
   - pandoc-types
   - retry
   - text
+  - unliftio-core
   - xml-conduit
 
 executables:
