@@ -210,7 +210,8 @@ storeBlogEntry BlogEntry{..} =
     writeOptions =
       def { writerReferenceLinks = True
           , writerSetextHeaders = False
-          , writerExtensions = pandocExtensions
+          , writerExtensions =
+            disableExtension Ext_shortcut_reference_links pandocExtensions
           , writerTemplate = Just "$titleblock$\n\n$body$"
           }
     fname = tshow date <> slug <> ".md"
