@@ -121,6 +121,7 @@ data BlogEntry = BlogEntry
   , url     :: Url
   , body    :: LText
   , date    :: Day
+  , tags    :: [Text]
   }
 
 renderCursor :: Cursor -> Maybe LText
@@ -157,7 +158,8 @@ extractMyRunixEntries entryIdPrefix res =
       (renderCursor =<< elBody) <*>
       (extractDay =<< headMay (cur $//
                                 (element "div" >=> attributeIs "class" "entry") &/
-                                (element "p" >=> attributeIs "class" "date")))
+                                (element "p" >=> attributeIs "class" "date"))) <*>
+      pure ["RuNIX"]
       where
         elBody = headMay (cur $// (element "div" >=> attributeIs "class" "content"))
     extractDay :: Cursor -> Maybe Day
@@ -170,7 +172,8 @@ extractEntry root =
   headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
   permalinkToUrl (headMay $ concat $ root $// attributeIs "class" "entry_permalink" &| attribute "href") <*>
   (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
-  extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title")
+  extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title") <*>
+  (Just $ root $// attributeIs "rel" "tag" &/ content)
   where
     permalinkToUrl :: Maybe Text -> Maybe Url
     -- Permalinks on Archived pages have IA prefixes which we drop here
@@ -202,7 +205,8 @@ storeBlogEntry BlogEntry{..} =
   writeMarkdown writeOptions >>=
   writeFileUtf8 (unpack fname)
   where
-    addMeta = setMeta "title" (MetaString $ unpack title)
+    addMeta = setMeta "title" (MetaString $ unpack title) .
+              setMeta "tags" (MetaList $ map (MetaString . unpack) tags)
     writeOptions =
       def { writerReferenceLinks = True
           , writerSetextHeaders = False
