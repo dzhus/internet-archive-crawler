@@ -138,17 +138,15 @@ parseTime' :: String -> Maybe Day
 parseTime' = parseTimeM True defaultTimeLocale "%d.%m.%Y"
 
 -- | Extract my entries from RuNIX page snapshot.
-extractMyRunixEntries :: Text
-                      -- ^ Matching @entrygroup@ id prefix.
-                      -> LByteString
+extractMyRunixEntries :: LByteString
                       -- ^ RuNIX page snapshot body.
                       -> [BlogEntry]
-extractMyRunixEntries entryIdPrefix res =
-  mapMaybe extractRunixEntry results
+extractMyRunixEntries res =
+  mapMaybe extractRunixEntry entries
   where
-    root = fromDocument $ parseLBS res
-    results =
-      root $//
+    entryIdPrefix = "http://sphinx.net.ru"
+    entries =
+      fromDocument (parseLBS res) $//
       element "div" >=>
       attributeIs "class" "entrygroup" >=>
       checkElement (\(Element _ as _) ->
@@ -169,29 +167,28 @@ extractMyRunixEntries entryIdPrefix res =
     extractDay c =
       parseTime' =<< headMay (words $ unpack $ concat $ c $// content)
 
-extractEntry :: Cursor -> Maybe BlogEntry
-extractEntry root =
-  BlogEntry <$>
-  headMay (root $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
-  permalinkToUrl (headMay $ concat $ root $// attributeIs "class" "entry_permalink" &| attribute "href") <*>
-  (renderCursor =<< headMay (root $// element "div" >=> attributeIs "class" "entry_body")) <*>
-  extractDay (concat $ concat $ root $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title") <*>
-  (Just $ root $// attributeIs "rel" "tag" &/ content)
-  where
-    permalinkToUrl :: Maybe Text -> Maybe Url
-    -- Permalinks on Archived pages have IA prefixes which we drop here
-    permalinkToUrl t = unpack <$> (headMay =<< tailMay =<< splitOn "/http://" <$> t)
-    extractDay :: Text -> Maybe Day
-    extractDay t = headMay $ mapMaybe parseTime' (words $ unpack t)
-
--- | Extract all blog entries from an IA page snapshot.
+-- | Extract all blog entries from a blog page snapshot.
 --
--- There may be more than one entry on a page.
-extractEntries :: LByteString -> [BlogEntry]
-extractEntries res =
-  catMaybes $ root $// attributeIs "class" "blog_entry" &| extractEntry
+-- There may be more than one entry on the page.
+extractBlogEntries :: LByteString -> [BlogEntry]
+extractBlogEntries res =
+  catMaybes $ root $// attributeIs "class" "blog_entry" &| extractBlogEntry
   where
     root = fromDocument $ parseLBS res
+    extractBlogEntry :: Cursor -> Maybe BlogEntry
+    extractBlogEntry cur =
+      BlogEntry <$>
+      headMay (cur $// element "h1" >=> attributeIs "class" "entry_title" &// content) <*>
+      permalinkToUrl (headMay $ concat $ cur $// attributeIs "class" "entry_permalink" &| attribute "href") <*>
+      (renderCursor =<< headMay (cur $// element "div" >=> attributeIs "class" "entry_body")) <*>
+      extractDay (concat $ concat $ cur $// element "div" >=> attributeIs "class" "entry_date" &| attribute "title") <*>
+      (Just $ cur $// attributeIs "rel" "tag" &/ content)
+      where
+        -- | Permalinks on Archived pages have IA prefixes which we drop here
+        permalinkToUrl :: Maybe Text -> Maybe Url
+        permalinkToUrl t = unpack <$> (headMay =<< tailMay =<< splitOn "/http://" <$> t)
+        extractDay :: Text -> Maybe Day
+        extractDay t = headMay $ mapMaybe parseTime' (words $ unpack t)
 
 getAllEntries :: (MonadCatch m, MonadIO m, MonadMask m)
               => Url
@@ -199,7 +196,7 @@ getAllEntries :: (MonadCatch m, MonadIO m, MonadMask m)
 getAllEntries url = do
   ts <- extractTimestamps <$> getCalendars url
   snapshots <- forM ts (getSnapshot url)
-  return $ concatMap extractEntries snapshots
+  return $ concatMap extractBlogEntries snapshots
 
 storeBlogEntry :: BlogEntry -> IO ()
 storeBlogEntry BlogEntry{..} =
