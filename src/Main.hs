@@ -224,16 +224,6 @@ storeBlogEntry BlogEntry{..} =
       lastMay (split slash $ dropWhileEnd slash $ pack url)
     slash = (== '/')
 
-saveRunix :: IO ()
-saveRunix = do
-  cs <- getCalendars "http://runix.org"
-  void $ concurrentlyPooled 10 (extractTimestamps cs) $
-    \ts -> do
-      putStrLn $ "Fetching " <> tshow ts
-      es <- extractMyRunixEntries "http://sphinx.net.ru"
-        <$> getSnapshot "http://runix.org" ts
-      unless (null es) $ forM_ es storeBlogEntry
-
 concurrentlyPooled :: MonadUnliftIO m
                    => Int
                    -> [e]
@@ -244,21 +234,29 @@ concurrentlyPooled n source action = do
     mapM (async . mapM action) $ chunksOf (length source `div` n) source
   concat <$> mapM wait processors
 
-saveMyEntries :: Text -> IO ()
-saveMyEntries pat = do
+getRunix :: IO [BlogEntry]
+getRunix = do
+  cs <- getCalendars "http://runix.org"
+  fmap concat $ concurrentlyPooled 10 (extractTimestamps cs) $ \ts -> do
+      putStrLn $ "Fetching " <> tshow ts
+      extractMyRunixEntries <$> getSnapshot "http://runix.org" ts
+
+getMyEntries :: Text -> IO [BlogEntry]
+getMyEntries pat = do
   urls <- getArchivedUrls pat
   putStrLn $ "Found " <> tshow (length urls) <> " URLs to crawl"
   -- Each URL may have multiple captures, collect them all
-  entries <- concurrentlyPooled 10 urls $ \u -> do
+  fmap concat $ concurrentlyPooled 10 urls $ \u -> do
     putStrLn $ "Fetching " <> pack u
     getAllEntries u
+
+main :: IO ()
+main = do
+  entries <- sequence [ getRunix
+                      , getMyEntries "http://sphinx.net.ru:80/blog/"
+                      , getMyEntries "http://dzhus.org:80/blog/"
+                      ]
   mapM_ storeBlogEntry $
     mapMaybe (headMay . sortOn (Down . length . body)) $
     groupBy (\e1 e2 -> url e1 == url e2) $
     concat entries
-
-main :: IO ()
-main = do
-  saveRunix
-  saveMyEntries "http://sphinx.net.ru:80/blog/"
-  saveMyEntries "http://dzhus.org:80/blog/"
