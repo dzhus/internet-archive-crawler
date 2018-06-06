@@ -262,4 +262,5 @@ main = do
   mapM_ storeBlogEntry $
     mapMaybe (headMay . sortOn (Down . length . body)) $
     groupBy (\e1 e2 -> comparing urlSlug e1 e2 == EQ) $
+    sortOn urlSlug $
     concat entries
