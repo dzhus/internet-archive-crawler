@@ -199,7 +199,7 @@ getAllEntries url = do
   return $ concatMap extractBlogEntries snapshots
 
 storeBlogEntry :: BlogEntry -> IO ()
-storeBlogEntry BlogEntry{..} =
+storeBlogEntry be@BlogEntry{..} =
   void $ runIO $
   addMeta <$> readHtml def (toStrict body) >>=
   writeMarkdown writeOptions >>=
@@ -217,11 +217,14 @@ storeBlogEntry BlogEntry{..} =
             pandocExtensions
           , writerTemplate = Just "$titleblock$\n\n$body$"
           }
-    fname = tshow date <> slug <> ".md"
-    -- A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
-    slug =
-      maybe "" ("-" <>) $
-      lastMay (split slash $ dropWhileEnd slash $ pack url)
+    fname = urlSlug be <> ".md"
+
+-- | A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
+urlSlug :: BlogEntry -> Text
+urlSlug BlogEntry{..} =
+  tshow date <>
+  maybe "" ("-" <>) (lastMay (split slash $ dropWhileEnd slash $ pack url))
+  where
     slash = (== '/')
 
 concurrentlyPooled :: MonadUnliftIO m
@@ -258,5 +261,5 @@ main = do
                       ]
   mapM_ storeBlogEntry $
     mapMaybe (headMay . sortOn (Down . length . body)) $
-    groupBy (\e1 e2 -> url e1 == url e2) $
+    groupBy (\e1 e2 -> comparing urlSlug e1 e2 == EQ) $
     concat entries
