@@ -221,7 +221,8 @@ storeBlogEntry be@BlogEntry{..} =
           }
     fname = urlSlug be <> ".md"
 
--- | A slug for "http://foo.kek/bar/baz-slug/" is "baz-slug"
+-- | A slug for an entry with URL @http://foo.kek/bar/baz-slug/@ is
+-- @-baz-slug@.
 urlSlug :: BlogEntry -> Text
 urlSlug BlogEntry{..} =
   tshow date <>
@@ -261,6 +262,8 @@ main = do
                       , getMyEntries "http://sphinx.net.ru:80/blog/"
                       , getMyEntries "http://dzhus.org:80/blog/"
                       ]
+  -- Store the longest variant of each article, identified by URL
+  -- slug.
   mapM_ storeBlogEntry $
     mapMaybe (headMay . sortOn (Down . length . body)) $
     groupBy (\e1 e2 -> comparing urlSlug e1 e2 == EQ) $
