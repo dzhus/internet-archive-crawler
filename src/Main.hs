@@ -130,7 +130,9 @@ renderCursor :: Cursor -> Maybe LText
 renderCursor cur =
   case node cur of
     NodeElement el ->
-      Just $ renderText def{rsXMLDeclaration = False, rsPretty = True} $
+      -- Do not prettify output as it ruins newlines inside
+      -- <pre><code> blocks
+      Just $ renderText def{rsXMLDeclaration = False, rsPretty = False} $
       Document (Prologue [] Nothing []) el []
     _ -> Nothing
 
